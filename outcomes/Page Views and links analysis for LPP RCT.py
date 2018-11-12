@@ -27,67 +27,74 @@
 # For the primary and some secondary outcomes, we need to use Google Analytics page views data:
 #
 # ## E1: Number of page views over one month on CCG page showing low-priority measures
-#
-# Timepoints:
-# - 1 month before/after
-# - April-Sept 2018 vs April-Sept 2019
-#
-# **Analytics data extraction procedure:**
-#
-# `Analytics - Behaviour - Site Content - All Pages`
-#
-#  ```
-# ADVANCED SEARCH: Page matching regexp "/ccg"  AND  Matching regexp "lowp" AND Exclude page including "analyse"
-#  SECONDARY DIMENSION: "DATE"
-#  DATE RANGE: Sept 2018 - Jan 2019 (visits take place Oct-Dec 2018); also April-Sept 2018 and April-Sept 2019
-#  SHOW ROWS: 5000
-#  ```
-#  Export as CSV
-#  Before importing, tidy up the csv to create a flat table
-#  (remove top and bottom groups of rows, convert numerical data to general format to remove commas)
-#
 # ## E2: Number of page views over one month on practice pages showing low-priority measures, grouped up to CCGs
 #
 # Timepoints:
 # - 1 month before/after
 # - April-Sept 2018 vs April-Sept 2019
 #
-#
-# **Analytics data extraction procedure:**
-# `Analytics - Behaviour - Site Content - All Pages`
-#
-#  ```
-# ADVANCED SEARCH: Page matching regexp "/practice"  AND  Matching regexp "lowp" AND Exclude page including "analyse"
-#  SECONDARY DIMENSION: "DATE"
-#  DATE RANGE: Sept 2018 - Jan 2019 (visits take place Oct-Dec 2018); also April-Sept 2018 and April-Sept 2019
-#  SHOW ROWS: 5000
-#  ```
-#
-#  Export as CSV
-#
-#  Before importing, tidy up the csv to create a flat table
-#  (remove top and bottom groups of rows, convert numerical data to general format to remove commas)
-#
 
 # +
 # Import page views data
 import pandas as pd
 import numpy as np
-
+import analytics
 # CCG-level data:
-df1 = pd.read_csv('../data/page_views_dummy_ccg.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
-# practice-level data:
-dfp = pd.read_csv('../data/page_views_dummy_practice.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
 
-df1 = pd.concat([df1,dfp])
-df1.head()
+VIEW_ID = '101677264'
+# DATE RANGE: Sept 2018 - Jan 2019 (visits take place Oct-Dec 2018); also April-Sept 2018 and April-Sept 2019
+ccg_query = [
+    {
+        'viewId': VIEW_ID,
+        "samplingLevel": "LARGE",
+        'dateRanges': [
+            {'startDate': '2018-04-01',
+             'endDate': '2019-09-30'}
+        ],
+        'metrics': [
+            {'expression': 'ga:pageViews'},
+            {'expression': 'ga:uniquePageViews'},
+        ],
+        "dimensions": [
+            {"name": "ga:pagePath"},
+            {"name": "ga:date"},
+        ],
+        "dimensionFilterClauses": [{
+            "operator": "AND",
+            "filters": [
+                {
+                    "dimensionName": "ga:pagePath",
+                    "operator": "REGEXP",
+                    "expressions": ["^/ccg.*lowp"]
+                },
+                {
+                    "dimensionName": "ga:pagePath",
+                    "not": True,
+                    "operator": "PARTIAL",
+                    "expressions": ["analyse"]
+                }
+            ]
+        }]
+    }]
+from importlib import reload
+reload(analytics)
+colnames = ["date","Page","Pageviews","Unique Pageviews"]
+df1 = analytics.query_analytics(ccg_query, columns=colnames)
+
+# ...and the same query at practice level
+practice_query = ccg_query.copy()
+practice_query[0]["dimensionFilterClauses"][0]["filters"][0]["expressions"] = ["^/practice.*lowp"]
+dfp = analytics.query_analytics(practice_query, columns=colnames)
 # -
 
-# convert Date field to date format
-df1["date"] = df1.Date.apply(str).str[:4] + '-' + df1.Date.apply(str).str[4:6] + '-' + df1.Date.apply(str).str[6:]
-df1["date"] = pd.to_datetime(df1.date)
-df1 = df1.drop("Date",axis=1)
-df1 = df1.loc[df1.Page.str.contains("lowp")]
+df1.head()
+
+# XXX note that some page URLs changed during the baseline period
+df1[~df1['Page'].str.contains("measures")].head()
+
+dfp.head()
+
+df1 = pd.concat([df1,dfp])
 df1.head()
 
 # extract ccg/practice code from path

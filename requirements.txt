@@ -8,3 +8,4 @@ jupytext
 matplotlib
 statsmodels
 scipy
+oauth2client

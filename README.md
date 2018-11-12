@@ -16,7 +16,10 @@ Install requirements:
 
     pip install -r requirements
 
-
 Install the virutalenv as a kernel for jupyter to use>:
 
     python -m ipykernel install --user --name lpvisitccg --display-name "Python (lpvisitccg)"
+
+In order to run the parts that query the Google Analytics API, you
+need to obtain the files `analyticsreporting.dat` and
+`client_secrets.json` and place them in `notebooks/`.
