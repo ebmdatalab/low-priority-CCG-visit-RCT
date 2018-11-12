@@ -7,9 +7,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 0.8.4
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python (lpccg)
 #     language: python
-#     name: python3
+#     name: lpvisitrct
 #   language_info:
 #     codemirror_mode:
 #       name: ipython
@@ -22,20 +22,20 @@
 #     version: 3.6.5
 # ---
 
-# # Engagement outcomes 
+# # Engagement outcomes
 #
 # For the primary and some secondary outcomes, we need to use Google Analytics page views data:
 #
 # ## E1: Number of page views over one month on CCG page showing low-priority measures
 #
-# Timepoints: 
+# Timepoints:
 # - 1 month before/after
 # - April-Sept 2018 vs April-Sept 2019
 #
 # **Analytics data extraction procedure:**
 #
 # `Analytics - Behaviour - Site Content - All Pages`
-#  
+#
 #  ```
 # ADVANCED SEARCH: Page matching regexp "/ccg"  AND  Matching regexp "lowp" AND Exclude page including "analyse"
 #  SECONDARY DIMENSION: "DATE"
@@ -45,24 +45,24 @@
 #  Export as CSV
 #  Before importing, tidy up the csv to create a flat table
 #  (remove top and bottom groups of rows, convert numerical data to general format to remove commas)
-#  
+#
 # ## E2: Number of page views over one month on practice pages showing low-priority measures, grouped up to CCGs
 #
-# Timepoints: 
+# Timepoints:
 # - 1 month before/after
 # - April-Sept 2018 vs April-Sept 2019
 #
-#  
+#
 # **Analytics data extraction procedure:**
 # `Analytics - Behaviour - Site Content - All Pages`
-#  
+#
 #  ```
 # ADVANCED SEARCH: Page matching regexp "/practice"  AND  Matching regexp "lowp" AND Exclude page including "analyse"
 #  SECONDARY DIMENSION: "DATE"
 #  DATE RANGE: Sept 2018 - Jan 2019 (visits take place Oct-Dec 2018); also April-Sept 2018 and April-Sept 2019
 #  SHOW ROWS: 5000
 #  ```
-#  
+#
 #  Export as CSV
 #
 #  Before importing, tidy up the csv to create a flat table
@@ -75,9 +75,9 @@ import pandas as pd
 import numpy as np
 
 # CCG-level data:
-df1 = pd.read_csv('page_views_dummy_ccg.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
+df1 = pd.read_csv('../data/page_views_dummy_ccg.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
 # practice-level data:
-dfp = pd.read_csv('page_views_dummy_practice.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
+dfp = pd.read_csv('../data/page_views_dummy_practice.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
 
 df1 = pd.concat([df1,dfp])
 df1.head()
@@ -100,15 +100,18 @@ GBQ_PROJECT_ID = '620265099307'
 
 # import practice-CCG mapping
 mapp = '''select distinct ccg_id, code
-from `ebmdatalab.hscic.practices` 
+from `ebmdatalab.hscic.practices`
 where setting = 4 and status_code != 'C'
 '''
 mapp = pd.read_gbq(mapp, GBQ_PROJECT_ID, dialect='standard',verbose=False)
 
+
+# +
+
 ### import **allocated** CCGs
-ccgs = pd.read_csv('randomisation_group.csv')
+ccgs = pd.read_csv('../data/randomisation_group.csv')
 # import joint team information
-team = pd.read_csv('joint_teams.csv')
+team = pd.read_csv('../data/joint_teams.csv')
 
 # create map of ccgs to joint teams
 ccgs = ccgs.merge(team,on="joint_team", how="left")
@@ -135,7 +138,7 @@ GBQ_PROJECT_ID = '620265099307'
 
 # import CCG population sizes
 p = '''select pct_id, sum(total_list_size) as list_size
-from `hscic.practice_statistics` as stats 
+from `hscic.practice_statistics` as stats
 where CAST(month AS DATE) = '2018-08-01'
 group by pct_id
 '''
@@ -152,16 +155,16 @@ p2.head()
 
 # +
 # import dates of interventions
-dates = pd.read_csv('allocated_ccgs_visit_timetable.csv')
+dates = pd.read_csv('../data/allocated_ccgs_visit_timetable.csv')
 dates["date"] = pd.to_datetime(dates.date)
 #merge with ccgs/joint teams
 dts = ccgs.merge(dates, on="joint_id",how="left").drop("pct_id",axis=1).drop_duplicates()
 
-# merge dates with list sizes 
+# merge dates with list sizes
 dts = dts.merge(p2, on="joint_id")
 dts["size_rank"] = dts.groupby("allocation").list_size.rank()
 
-#assign dummy intervention dates to control practices by pairing on total list size 
+#assign dummy intervention dates to control practices by pairing on total list size
 i_group = dts[["allocation","date","size_rank"]].loc[dts.allocation=="I"].drop("allocation",axis=1)
 
 dts = dts.merge(i_group, on= "size_rank", how="left", suffixes=["","_int"]).drop("date",axis=1).sort_values(by=["size_rank","allocation"])
@@ -196,7 +199,7 @@ m2.head()
 # -
 
 # # Engagement outcome E1 #######################################################
-# ## Number of page views over one month on CCG pages showing low-priority measures, before vs after intervention, between intervention and control groups. 
+# ## Number of page views over one month on CCG pages showing low-priority measures, before vs after intervention, between intervention and control groups.
 #
 
 # filter CCG page views only:
@@ -261,7 +264,7 @@ params.merge(pvals, how='left',on='factor').set_index('factor').reset_index()
 lm.conf_int().loc["intervention"]
 
 # # Engagement outcome E2
-# ## Number of page views over one month on practice pages showing low-priority measures, before vs after intervention, grouped up to CCGs, between intervention and control groups. 
+# ## Number of page views over one month on practice pages showing low-priority measures, before vs after intervention, grouped up to CCGs, between intervention and control groups.
 
 # filter practice page views only:
 m5 = m2.loc[m2.org_type_ == "practice"]
@@ -286,14 +289,14 @@ result = pd.DataFrame({'Unique Pageviews_after': m5["Unique Pageviews_after"].de
 
 result
 
+# -
 
-# +
 import matplotlib.pyplot as plt
-
+# #%matplotlib inline
+# %matplotlib notebook
 m5[["proxy_pageviews_after","proxy_pageviews_before","Unique Pageviews_after","Unique Pageviews_before"]].hist(bins=10)
 plt.show()
 
-# -
 
 m5.groupby(["allocation_"])['proxy_pageviews_before','proxy_pageviews_after'].mean()
 
@@ -319,14 +322,14 @@ params.merge(pvals, how='left',on='factor').set_index('factor')
 lm.conf_int().loc["intervention"]
 
 # # Engagement outcomes E3 and E4 : Alert sign-ups
-# ## E3 Number of registrations to OpenPrescribing CCG email alerts 
+# ## E3 Number of registrations to OpenPrescribing CCG email alerts
 # ## E4 Number of registrations to OpenPrescribing Practice email alerts grouped up to CCG
 # (New sign-ups within 3 months of intervention. The CCG registered population and number of sign-ups prior to the intervention will be co-variables.)
 
 # +
 #import data from django administration, filtered for confirmed sign-ups only (no date filter)
 
-alerts = pd.read_csv('OrgBookmark-2018-11-02.csv')
+alerts = pd.read_csv('../data/OrgBookmark-2018-11-02.csv')
 alerts["created_at"] = pd.to_datetime(alerts.created_at)
 alerts.head()
 # -
@@ -422,5 +425,3 @@ params.merge(pvals, how='left',on='factor').set_index('factor')
 
 # confidence intervals
 lm.conf_int().loc["intervention"]
-
-

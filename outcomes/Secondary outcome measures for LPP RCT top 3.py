@@ -23,11 +23,11 @@
 #     version: 3.6.5
 # ---
 
-# # Secondary Outcomes 
+# # Secondary Outcomes
 # **S1. Cost per 1,000 patients for top 3 pre-specified “low-priority” treatments combined.**
 #
 # **S2. Total items prescribed per 1000 registered patients for Co-proxamol.**
-#  
+#
 # **S3. Total items prescribed per 1000 registered patients for Dosulepin.**
 
 # +
@@ -44,7 +44,7 @@ GBQ_PROJECT_ID = '620265099307'
 
 # -
 
-# ## S1. Cost per 1,000 patients for top 3 pre-specified “low-priority” treatments combined. 
+# ## S1. Cost per 1,000 patients for top 3 pre-specified “low-priority” treatments combined.
 
 # +
 # Load costs and items data for each of the individual low-priority measures
@@ -105,9 +105,9 @@ agg_6m.head()
 
 # +
 ### import **allocated** CCGs
-ccgs = pd.read_csv('randomisation_group.csv')
+ccgs = pd.read_csv('../data/randomisation_group.csv')
 # import joint team information
-team = pd.read_csv('joint_teams.csv')
+team = pd.read_csv('../data/joint_teams.csv')
 
 ccgs = ccgs.merge(team,on="joint_team", how="left")
 #fill black ccg_ids from joint_id column
@@ -120,7 +120,7 @@ df2b.head()
 
 
 # +
-# group up to Joint team groups 
+# group up to Joint team groups
 # note: SUM both numerators and population denominator across geographies
 df2c = df2b.groupby(["joint_id","allocation","measure","period"]).sum()
 df2c = df2c.unstack().reset_index()
@@ -147,7 +147,7 @@ df5 = df5.groupby(["joint_id_","allocation_"]).agg({"cost_baseline":"sum","cost_
 ### calculate aggregated measure values for combined cost for the top 3 measures
 df5["baseline_calc_value"] = df5.cost_baseline / df5.denominator_baseline
 df5["follow_up_calc_value"] = df5["cost_follow-up"] / df5["denominator_follow-up"]
-df5.head() 
+df5.head()
 
 
 # +
@@ -166,7 +166,7 @@ pvals = pd.DataFrame(lm.pvalues[[1,2]]).reset_index().rename(columns={0: 'p valu
 params.merge(pvals, how='left',on='factor').set_index('factor')
 # -
 
-# ## S2: Total items prescribed per 1000 registered patients for Co-proxamol. 
+# ## S2: Total items prescribed per 1000 registered patients for Co-proxamol.
 
 # +
 # filter data for coproxamol measure:
@@ -193,7 +193,7 @@ pvals = pd.DataFrame(lm.pvalues[[1,2]]).reset_index().rename(columns={0: 'p valu
 params.merge(pvals, how='left',on='factor').set_index('factor')
 # -
 
-# ## S3: Total items prescribed per 1000 registered patients for Dosulepin. 
+# ## S3: Total items prescribed per 1000 registered patients for Dosulepin.
 
 # +
 # filter data for dosulepin measure:

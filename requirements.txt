@@ -5,3 +5,6 @@ pandas-gbq
 ipykernel
 pytest
 jupytext
+matplotlib
+statsmodels
+scipy

@@ -26,7 +26,7 @@
 # # Primary outcomes
 # **P1.  Cost per 1,000 patients for all 18 pre-specified “low-priority” treatments combined.**
 #
-# **P2. Total items per 1000 across all 18 low priority treatments.** 
+# **P2. Total items per 1000 across all 18 low priority treatments.**
 #
 
 # +
@@ -93,9 +93,9 @@ agg_6m.head()
 
 # +
 ### import **allocated** CCGs
-ccgs = pd.read_csv('randomisation_group.csv')
+ccgs = pd.read_csv('../data/randomisation_group.csv')
 # import joint team information
-team = pd.read_csv('joint_teams.csv')
+team = pd.read_csv('../data/joint_teams.csv')
 
 ccgs = ccgs.merge(team,on="joint_team", how="left")
 #fill black ccg_ids from joint_id column
@@ -109,7 +109,7 @@ df2b.head()
 
 # -
 
-# group up to Joint team groups 
+# group up to Joint team groups
 # note: SUM both numerator and population denominator across geographies
 df2c = df2b.groupby(["joint_id","allocation","period"]).sum()
 df2c = df2c.unstack().reset_index()
@@ -129,7 +129,7 @@ df2c.head()
 # +
 # plot time series chart for intervention versus control
 
-'''# merge MONTHLY data with practice allocations 
+'''# merge MONTHLY data with practice allocations
 dfp = df1.loc[df1.month_no>0]
 dfp = dfp.loc[~pd.isnull(dfp.calc_value)]
 dfp = prac.merge(dfp, how='left', on='practice_id')#.set_index('allocation')
@@ -150,7 +150,7 @@ plt.show()'''
 
 # +
 ### Primary Outcome ########################
-# Cost per 1,000 patients for all 18 pre-specified “low-priority” treatments combined, 
+# Cost per 1,000 patients for all 18 pre-specified “low-priority” treatments combined,
 # between intervention and control groups, assessed by applying a multivariable linear regression model.
 
 import statsmodels.formula.api as smf
@@ -168,7 +168,7 @@ params.merge(pvals, how='left',on='factor').set_index('factor')
 
 # +
 ### Primary Outcome P2 ########################
-# ITEMS per 1,000 patients for all 18 pre-specified “low-priority” treatments combined, 
+# ITEMS per 1,000 patients for all 18 pre-specified “low-priority” treatments combined,
 # between intervention and control groups, assessed by applying a multivariable linear regression model.
 
 import statsmodels.formula.api as smf
@@ -185,7 +185,5 @@ params.merge(pvals, how='left',on='factor').set_index('factor')
 
 # -
 
-# # remaining: 
+# # remaining:
 # ## add confidence intervals
-
-

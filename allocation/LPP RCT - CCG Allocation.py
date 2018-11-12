@@ -48,6 +48,9 @@ df1 = pd.read_gbq(q, GBQ_PROJECT_ID, dialect='standard',verbose=False)
 df1["month"] = pd.to_datetime(df1.month)
 
 df1.head() # this gives the first few rows of data
+# -
+
+df1[(df1.month == '2018-06-01') & (df1.pct_id == '03Y')]
 
 # +
 ### classify the data by period
@@ -66,14 +69,14 @@ df1['period'] = np.select(conditions, choices, default='0')
 df1.head()
 
 # +
-### aggregate the data over the each period, and 
+### aggregate the data over the each period, and
 ### then extract just the 6 months of baseline data
 
 # take columns of interest from df
 df2 = df1[["pct_id","period", "month", "numerator","denominator"]]
 
 # Perform groupby aggregation
-agg_6m = df2.groupby(["pct_id","period"]).sum() 
+agg_6m = df2.groupby(["pct_id","period"]).sum()
 
 ### calculate aggregated measure values
 agg_6m["calc_value"] = agg_6m.numerator / agg_6m.denominator
@@ -95,15 +98,15 @@ df3.loc[(df3.pct_id!="08H")&(df3.pct_id !="99P")&(df3.pct_id !="99Q")].sort_valu
 #
 # Specifically, the 50 CCGs above were reviewed by a pharmacist for membership of joint medicines optimisations teams.  The pharmacist created a spreadsheet indicating membership, `joint_teams.csv`, used in the following cells.
 #
-# This is to avoid contamination between CCGs that work together. Therefore, we block randomise taking these teams into account. 
+# This is to avoid contamination between CCGs that work together. Therefore, we block randomise taking these teams into account.
 #
 
 # +
 # import joint team information
-team = pd.read_csv('joint_teams.csv')
+team = pd.read_csv('../data/joint_teams.csv')
 
-# give each team a proxy id, i.e. where there are teams, assign the 
-# code of its members to the entire team. This  member becomes the 
+# give each team a proxy id, i.e. where there are teams, assign the
+# code of its members to the entire team. This  member becomes the
 # CCG we visit as the intervention for that team.
 team2 = pd.DataFrame(team.groupby("joint_team")["ccg_id"].agg(["count","max"])).reset_index().rename(columns={"max":"joint_id"})
 team = team.merge(team2, on="joint_team")
@@ -122,7 +125,7 @@ j2["baseline"] = j2.numerator / j2.denominator
 j2.head()
 
 # +
-### calculate percentile for each ccg / joint team for spend during baseline period 
+### calculate percentile for each ccg / joint team for spend during baseline period
 # and select the worst 40 to be randomised
 
 j3 = j2.copy()
@@ -135,7 +138,7 @@ top40
 top40.describe()
 
 # +
-### allocate bottom CCGs to intervention and control groups 
+### allocate bottom CCGs to intervention and control groups
 
 # set seeds for random number generation to ensure repeatable
 seed1 = 321
@@ -151,12 +154,12 @@ df5["allocation_code"]= df5.allocation_ranking.mod(2)
 
 #create final allocation groups
 df5['allocation'] = np.where(df5['allocation_code']==0,'con','I')
+df5.to_csv('../data/randomisation_group.csv')
 
 print (df5.loc[df5.allocation=="I"].joint_id.count(), 'CCGs have been assigned to the intervention group,')
 print ("with an average spend of £",round(df5.loc[df5.allocation=="I"].baseline.mean(),0), "per 1000. SD:",round(df5.loc[df5.allocation=="I"].baseline.std(),0))
 print (df5.loc[df5.allocation=="con"].joint_id.count(), 'CCGs have been assigned to the control group,')
 print ("with an average spend of £",round(df5.loc[df5.allocation=="con"].baseline.mean(),0), "per 1000. SD:",round(df5.loc[df5.allocation=="con"].baseline.std(),0))
-
 
 # +
 ### import CCG names for CCGs allocated to intervention group
@@ -166,7 +169,7 @@ SELECT
   name
 FROM
   ebmdatalab.hscic.ccgs
-WHERE org_type = "CCG" 
+WHERE org_type = "CCG"
 '''
 
 ccg = pd.io.gbq.read_gbq(q, GBQ_PROJECT_ID, dialect='standard',verbose=False)
@@ -178,11 +181,9 @@ dfm = df5.loc[df5.allocation == "I"].merge(ccg, how='left', left_on='joint_id',r
 dfm = dfm[["joint_id","name"]].merge(team2, on="joint_id", how="left").sort_values(by="joint_team").rename(columns={"count":"CCGs_included"})
 dfm
 
-dfm.to_csv('allocated_ccgs_visit.csv')
+dfm.to_csv('../data/allocated_ccgs_visit.csv')
 # -
 
 # ### Calculate baseline stats for whole population, to use to give context in power calculation
 
 j3["baseline"].describe(percentiles = [.1, .25, .5, .75, .8,.85, .9])
-
-
