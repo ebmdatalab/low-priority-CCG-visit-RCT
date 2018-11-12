@@ -8,9 +8,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 0.8.4
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python (lpccg)
 #     language: python
-#     name: python3
+#     name: lpvisitrct
 #   language_info:
 #     codemirror_mode:
 #       name: ipython
@@ -41,18 +41,16 @@ import numpy as np
 GBQ_PROJECT_ID = '620265099307'
 
 q = '''SELECT * FROM ebmdatalab.measures.ccg_data_lpzomnibus
-WHERE EXTRACT (YEAR from month)  >= 2018
+WHERE month >= '2018-01-01' AND month <= '2018-08-01'
 '''
 df1 = pd.read_gbq(q, GBQ_PROJECT_ID, dialect='standard',verbose=False)
-
-## note: parsing dates is quite memory-intensive, make sure not too many programmes running
 
 df1["month"] = pd.to_datetime(df1.month)
 
 df1.head() # this gives the first few rows of data
 
 # +
-### filter out the baseline and follow-up periods
+### classify the data by period
 import datetime
 
 conditions = [
@@ -68,7 +66,8 @@ df1['period'] = np.select(conditions, choices, default='0')
 df1.head()
 
 # +
-### aggregate data over 6-month baseline
+### aggregate the data over the each period, and 
+### then extract just the 6 months of baseline data
 
 # take columns of interest from df
 df2 = df1[["pct_id","period", "month", "numerator","denominator"]]
@@ -92,14 +91,20 @@ df3.loc[(df3.pct_id!="08H")&(df3.pct_id !="99P")&(df3.pct_id !="99Q")].sort_valu
 
 # -
 
-#
 # ### The selected CCGs are pre-screened for joint medicines optimisation teams
+#
+# Specifically, the 50 CCGs above were reviewed by a pharmacist for membership of joint medicines optimisations teams.  The pharmacist created a spreadsheet indicating membership, `joint_teams.csv`, used in the following cells.
+#
+# This is to avoid contamination between CCGs that work together. Therefore, we block randomise taking these teams into account. 
+#
 
 # +
 # import joint team information
 team = pd.read_csv('joint_teams.csv')
 
-#give each team a proxy id
+# give each team a proxy id, i.e. where there are teams, assign the 
+# code of its members to the entire team. This  member becomes the 
+# CCG we visit as the intervention for that team.
 team2 = pd.DataFrame(team.groupby("joint_team")["ccg_id"].agg(["count","max"])).reset_index().rename(columns={"max":"joint_id"})
 team = team.merge(team2, on="joint_team")
 team.head()
@@ -117,7 +122,7 @@ j2["baseline"] = j2.numerator / j2.denominator
 j2.head()
 
 # +
-### calculate percentile for each ccg(now screened for joint working) for spend during baseline period 
+### calculate percentile for each ccg / joint team for spend during baseline period 
 # and select the worst 40 to be randomised
 
 j3 = j2.copy()
@@ -161,7 +166,7 @@ SELECT
   name
 FROM
   ebmdatalab.hscic.ccgs
-WHERE org_type = "CCG"
+WHERE org_type = "CCG" 
 '''
 
 ccg = pd.io.gbq.read_gbq(q, GBQ_PROJECT_ID, dialect='standard',verbose=False)
