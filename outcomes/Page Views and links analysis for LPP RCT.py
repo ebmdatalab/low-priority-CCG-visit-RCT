@@ -22,6 +22,21 @@
 #     version: 3.6.5
 # ---
 
+# Imports and variables
+from IPython.display import display
+import pandas as pd
+import numpy as np
+import analytics
+import matplotlib.pyplot as plt
+import statsmodels.formula.api as smf
+
+DUMMY_RUN = True  # Change this to False when the analysis is run for real
+ANALYTICS_VIEW_ID = '101677264'
+GBQ_PROJECT_ID = '620265099307'
+
+# +
+# Import page views data
+#
 # # Engagement outcomes
 #
 # For the primary and some secondary outcomes, we need to use Google Analytics page views data:
@@ -34,299 +49,274 @@
 # - April-Sept 2018 vs April-Sept 2019
 #
 
-# +
-# Import page views data
-import pandas as pd
-import numpy as np
-import analytics
-# CCG-level data:
-
-VIEW_ID = '101677264'
-# DATE RANGE: Sept 2018 - Jan 2019 (visits take place Oct-Dec 2018); also April-Sept 2018 and April-Sept 2019
-ccg_query = [
-    {
-        'viewId': VIEW_ID,
-        "samplingLevel": "LARGE",
-        'dateRanges': [
-            {'startDate': '2018-04-01',
-             'endDate': '2019-09-30'}
-        ],
-        'metrics': [
-            {'expression': 'ga:pageViews'},
-            {'expression': 'ga:uniquePageViews'},
-        ],
-        "dimensions": [
-            {"name": "ga:pagePath"},
-            {"name": "ga:date"},
-        ],
-        "dimensionFilterClauses": [{
-            "operator": "AND",
-            "filters": [
-                {
-                    "dimensionName": "ga:pagePath",
-                    "operator": "REGEXP",
-                    "expressions": ["^/ccg.*lowp"]
-                },
-                {
-                    "dimensionName": "ga:pagePath",
-                    "not": True,
-                    "operator": "PARTIAL",
-                    "expressions": ["analyse"]
-                }
-            ]
+if DUMMY_RUN:
+    # CCG-level data:
+    ccg_stats = pd.read_csv('../data/page_views_dummy_ccg.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
+    # practice-level data:
+    practice_stats = pd.read_csv('../data/page_views_dummy_practice.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
+    ccg_stats['date'] = pd.to_datetime(ccg_stats.Date, format="%Y%m%d")
+    practice_stats['date'] = pd.to_datetime(practice_stats.Date, format="%Y%m%d")
+    # Filter out wrongly included lines in dummy data
+    ccg_stats = ccg_stats[ccg_stats.Page.str.contains("lowpriority")]
+    practice_stats = practice_stats[practice_stats.Page.str.contains("lowpriority")]
+else:
+    ccg_query = [
+        {
+            'viewId': ANALYTICS_VIEW_ID,
+            "samplingLevel": "LARGE",
+            'dateRanges': [
+                {'startDate': '2018-04-01',
+                 'endDate': '2019-09-30'}
+            ],
+            'metrics': [
+                {'expression': 'ga:pageViews'},
+                {'expression': 'ga:uniquePageViews'},
+            ],
+            "dimensions": [
+                {"name": "ga:pagePath"},
+                {"name": "ga:date"},
+            ],
+            "dimensionFilterClauses": [{
+                "operator": "AND",
+                "filters": [
+                    {
+                        "dimensionName": "ga:pagePath",
+                        "operator": "REGEXP",
+                        "expressions": ["^/ccg.*lowp"]
+                    },
+                    {
+                        "dimensionName": "ga:pagePath",
+                        "not": True,
+                        "operator": "PARTIAL",
+                        "expressions": ["analyse"]
+                    }
+                ]
+            }]
         }]
-    }]
-from importlib import reload
-reload(analytics)
-colnames = ["date","Page","Pageviews","Unique Pageviews"]
-df1 = analytics.query_analytics(ccg_query, columns=colnames)
+    colnames = ["Date", "Page", "Pageviews", "Unique Pageviews"]
+    ccg_stats = analytics.query_analytics(ccg_query, columns=colnames)
 
-# ...and the same query at practice level
-practice_query = ccg_query.copy()
-practice_query[0]["dimensionFilterClauses"][0]["filters"][0]["expressions"] = ["^/practice.*lowp"]
-dfp = analytics.query_analytics(practice_query, columns=colnames)
+    # ...and the same query at practice level
+    practice_query = ccg_query.copy()
+    practice_query[0]["dimensionFilterClauses"][0]["filters"][0]["expressions"] = ["^/practice.*lowp"]
+    practice_stats = analytics.query_analytics(practice_query, columns=colnames)
+
+    ccg_stats.to_csv("../data/ccg_pageview_stats.csv")
+    practice_stats.to_csv("../data/practice_pageview_stats.csv")
 # -
 
-df1.head()
+ccg_stats.head()
 
-# XXX note that some page URLs changed during the baseline period
-df1[~df1['Page'].str.contains("measures")].head()
-
-dfp.head()
-
-df1 = pd.concat([df1,dfp])
-df1.head()
+all_stats = pd.concat([ccg_stats,practice_stats], sort=False)
 
 # extract ccg/practice code from path
-df1["org_id"] = np.where(df1.Page.str.contains("ccg"),df1.Page.str.replace('/ccg/', '').str[:3],df1.Page.str.replace('/practice/', '').str[:6])
-df1["org_type"] = np.where(df1.Page.str.contains("ccg"),"ccg",'practice')
-df1.head()
+all_stats["org_id"] = np.where(
+    all_stats.Page.str.contains("ccg"),
+    all_stats.Page.str.replace('/ccg/', '').str[:3],
+    all_stats.Page.str.replace('/practice/', '').str[:6])
+all_stats["org_type"] = np.where(
+    all_stats.Page.str.contains("ccg"),
+    "ccg",
+    'practice')
+all_stats.head()
 
 # +
-GBQ_PROJECT_ID = '620265099307'
+### import allocated Rct_Ccgs
+rct_ccgs = pd.read_csv('../data/randomisation_group.csv')
 
-# import practice-CCG mapping
-mapp = '''select distinct ccg_id, code
+# joint team information
+team = pd.read_csv('../data/joint_teams.csv')
+
+# create map of rct_ccgs to joint teams
+rct_ccgs = rct_ccgs.merge(team, on="joint_team", how="left")
+
+# fill blank ccg_ids from joint_id column, so every CCG has a value for joint_id
+rct_ccgs["pct_id"] = rct_ccgs["ccg_id"].combine_first(rct_ccgs["joint_id"])
+rct_ccgs = rct_ccgs[["joint_id", "allocation", "pct_id"]]
+rct_ccgs.head()
+
+# +
+## Map practices to Rct_Ccgs, for practice-level analysis
+
+# Get current mapping data from bigquery
+practice_to_ccg = '''select distinct ccg_id, code
 from `ebmdatalab.hscic.practices`
 where setting = 4 and status_code != 'C'
 '''
-mapp = pd.read_gbq(mapp, GBQ_PROJECT_ID, dialect='standard',verbose=False)
 
-
-# +
-
-### import **allocated** CCGs
-ccgs = pd.read_csv('../data/randomisation_group.csv')
-# import joint team information
-team = pd.read_csv('../data/joint_teams.csv')
-
-# create map of ccgs to joint teams
-ccgs = ccgs.merge(team,on="joint_team", how="left")
-#fill blank ccg_ids from joint_id column
-ccgs["pct_id"] = ccgs["ccg_id"].combine_first(ccgs["joint_id"])
-ccgs = ccgs[["joint_id","allocation","pct_id"]]
-ccgs.head()
+practice_to_ccg = pd.read_gbq(practice_to_ccg, GBQ_PROJECT_ID, dialect='standard', verbose=False)
+practice_to_ccg.to_csv("../data/practice_to_ccg.csv")
 # -
 
-# map practices onto CCGs
-map2 = ccgs[["pct_id"]].merge(mapp, left_on="pct_id", right_on ="ccg_id", how="left")
-df2 = df1.merge(map2[["ccg_id","code"]], left_on="org_id",right_on="code", how="left").drop("code",axis=1)
-df2.loc[df2.org_id.str.len()==3,"ccg_id"] =df2.org_id
-df2.head()
-
-# map CCGs onto joint teams
-df3 = df2.reset_index()
-df3 = ccgs.merge(df3, left_on="pct_id",right_on="ccg_id",how="left")
-df3.head()
-
+# extract practice statistics for practices that are members of CCGs who are in the RCT
+rct_practices = rct_ccgs[["pct_id"]].merge(practice_to_ccg, left_on="pct_id", right_on ="ccg_id", how="left")
+# add a new "ccg_id" column just for practices
+all_stats_with_ccg = all_stats.merge(
+    rct_practices[["ccg_id", "code"]],
+    left_on="org_id",
+    right_on="code",
+    how="left").drop("code", axis=1)
+all_stats_with_ccg.loc[all_stats_with_ccg.org_id.str.len() == 3, "ccg_id"] = all_stats_with_ccg.org_id
+# Add joint team id and allocation onto the new stats
+stats_with_allocations = rct_ccgs.merge(all_stats_with_ccg, left_on="pct_id",right_on="ccg_id",how="left")
 
 # +
-GBQ_PROJECT_ID = '620265099307'
-
 # import CCG population sizes
-p = '''select pct_id, sum(total_list_size) as list_size
+
+query = '''select pct_id, sum(total_list_size) as list_size
 from `hscic.practice_statistics` as stats
 where CAST(month AS DATE) = '2018-08-01'
 group by pct_id
 '''
+pop = pd.read_gbq(query, GBQ_PROJECT_ID, dialect='standard', verbose=False)
+pop.to_csv("../data/practice_statistics.csv")
 
-pop = pd.read_gbq(p, GBQ_PROJECT_ID, dialect='standard',verbose=False)
-
-# merge ccgs with population data
-p2 = ccgs.merge(pop, on="pct_id",how="left")
+# +
+# merge rct_ccgs with population data
+ccg_populations = rct_ccgs.merge(pop, on="pct_id", how="left")
 
 # group up to joint teams
-p2 = p2.groupby("joint_id").sum().reset_index()
+joint_team_populations = ccg_populations.groupby("joint_id").sum().reset_index()
+joint_team_populations.head()
 
-p2.head()
 
 # +
 # import dates of interventions
-dates = pd.read_csv('../data/allocated_ccgs_visit_timetable.csv')
-dates["date"] = pd.to_datetime(dates.date)
-#merge with ccgs/joint teams
-dts = ccgs.merge(dates, on="joint_id",how="left").drop("pct_id",axis=1).drop_duplicates()
+visit_dates = pd.read_csv('../data/allocated_ccgs_visit_timetable.csv')
+visit_dates["date"] = pd.to_datetime(visit_dates.date)
 
-# merge dates with list sizes
-dts = dts.merge(p2, on="joint_id")
-dts["size_rank"] = dts.groupby("allocation").list_size.rank()
+# merge with rct_ccgs/joint teams
+allocations_with_dates = rct_ccgs.merge(visit_dates, on="joint_id", how="left").drop("pct_id", axis=1).drop_duplicates()
+allocations_with_dates_and_sizes = allocations_with_dates.merge(joint_team_populations, on="joint_id")
 
-#assign dummy intervention dates to control practices by pairing on total list size
-i_group = dts[["allocation","date","size_rank"]].loc[dts.allocation=="I"].drop("allocation",axis=1)
+# rank by size, to allow us to pair similar interventions and controls
+allocations_with_dates_and_sizes["size_rank"] = allocations_with_dates_and_sizes.groupby("allocation").list_size.rank()
 
-dts = dts.merge(i_group, on= "size_rank", how="left", suffixes=["","_int"]).drop("date",axis=1).sort_values(by=["size_rank","allocation"])
-dts.head()
+# assign dummy intervention dates to control practices by pairing on total list size
+i_group = allocations_with_dates_and_sizes[["allocation", "date", "size_rank"]]\
+          .loc[allocations_with_dates_and_sizes.allocation == "I"]\
+          .drop("allocation", axis=1)
 
-# +
-# join allocated CCGs and visit dates to page views data
-m = dts.drop("size_rank",axis=1).merge(df3.drop(["allocation","pct_id","ccg_id","index"],axis=1), how='left', on='joint_id')
+allocations_with_dates_and_sizes = allocations_with_dates_and_sizes.merge(i_group, on="size_rank", how="left", suffixes=["", "_int"])\
+         .drop("date", axis=1)\
+         .sort_values(by=["size_rank", "allocation"])
+allocations_with_dates_and_sizes.head()
+#allocations_with_dates_and_sizes[((allocations_with_dates_and_sizes['joint_id'] == '02G') & (allocations_with_dates_and_sizes['date_int'] == '2018-10-05'))]
+# -
 
-m.head(9)
+# join joint-group / ccg allocations, visit dates and list size info to page views data
+all_data = allocations_with_dates_and_sizes.drop("size_rank", axis=1)\
+       .merge(
+           stats_with_allocations.drop(["allocation", "pct_id", "ccg_id"], axis=1),
+           how='left',
+           on='joint_id')
+all_data.head(2)
 
 # +
 # assign each page view occurrence to before vs after intervention (1 month ~ 28 days)
 
-m["datediff"] = m.date-m.date_int
-m["timing"] = "none"
-m.loc[(m.datediff<="28 days")&(m.datediff> "0 days"),"timing"] = "after"
-m.loc[(m.datediff>="-28 days")&(m.datediff< "0 days"),"timing"] = "before"
-m["Unique Pageviews"] =m["Unique Pageviews"].fillna(0)
-m.head()
+all_data["datediff"] = all_data.date - all_data.date_int
+all_data["timing"] = "none"
+all_data.loc[(all_data.datediff <= "28 days") & (all_data.datediff > "0 days"),
+      "timing"] = "after"
+all_data.loc[(all_data.datediff >= "-28 days") & (all_data.datediff < "0 days"),
+      "timing"] = "before"
+all_data["Unique Pageviews"] = all_data["Unique Pageviews"].fillna(0)
+all_data.head(2)
 
 # +
-# group up page views data to joint teams and sum page views before and after interventions
+# group up page views data to joint teams and sum page views before
+# and after interventions
 
-m2 = m.loc[m.timing!=""].groupby(["allocation","joint_id","org_type","list_size","timing"]).agg({"Unique Pageviews":sum,
-                                                                                      "Page":"nunique"}).unstack().fillna(0)
-m2 = m2.rename(columns={"Page":"No_of_Pages"}).reset_index()
+all_data_agg = all_data.groupby(["allocation", "joint_id", "org_type", "list_size", "timing"])\
+      .agg({"Unique Pageviews": sum, "Page": "nunique"}).unstack().fillna(0)
+all_data_agg = all_data_agg.rename(columns={"Page": "No_of_Pages"}).reset_index()
 #flatten columns and drop superfluous columns
-m2.columns = m2.columns.map('_'.join)
-m2 = m2.drop(["Unique Pageviews_none","No_of_Pages_none"], axis=1)
-m2.head()
+all_data_agg.columns = all_data_agg.columns.map('_'.join)
+all_data_agg = all_data_agg.drop(["Unique Pageviews_none","No_of_Pages_none"], axis=1)
+all_data_agg.head()
 # -
+
+all_data_agg[((all_data_agg['joint_id_'] == '01V'))]
 
 # # Engagement outcome E1 #######################################################
 # ## Number of page views over one month on CCG pages showing low-priority measures, before vs after intervention, between intervention and control groups.
 #
 
+# +
+def trim_5_percentiles(df, debug=False):
+    # max-out top 5% to reduce any extreme outliers
+    df = df.copy()
+
+    max_out = df['Unique Pageviews_before'].quantile(0.95)
+    df["proxy_pageviews_before"] = np.where(
+        df['Unique Pageviews_before'] < max_out,
+        df['Unique Pageviews_before'],
+        max_out)
+    max_out_b = df['Unique Pageviews_after'].quantile(0.95)
+    df["proxy_pageviews_after"] = np.where(
+        df['Unique Pageviews_after'] < max_out_b,
+        df['Unique Pageviews_after'],
+        max_out_b)
+
+    if debug: 
+        result = pd.DataFrame(
+            {'Unique Pageviews_after': df["Unique Pageviews_after"].describe(),
+             'Unique Pageviews_before': df["Unique Pageviews_before"].describe(),
+             'Proxy_pageviews_after': df["proxy_pageviews_after"].describe(),
+             'Proxy_pageviews_before': df["proxy_pageviews_before"].describe()})
+        df[["proxy_pageviews_after",
+                "proxy_pageviews_before",
+            "Unique Pageviews_after",
+            "Unique Pageviews_before"]].hist(bins=10)
+        display("Descriptive stats:")
+        display(result)
+        display("Histogram before and after trimming:")
+        plt.show()
+        display("Mean pageviews before and after:")
+        display(ccg_data_agg_trimmed.groupby(["allocation_"])[
+        'proxy_pageviews_before', 'proxy_pageviews_after'].mean())
+    return df
+
+
+def compute_regression(df):
+    data = df.copy()
+
+    # create a new Series called "intervention" to convert
+    # intervention/control to numerical values
+    data['intervention'] = data.allocation_.map({'con': 0, 'I': 1})
+
+    lm = smf.ols(
+        formula=('data["proxy_pageviews_after"] ~ data["proxy_pageviews_before"] '
+                 '+intervention'),
+        data=data).fit()
+
+    # output regression coefficients and p-values:
+    params = pd.DataFrame(lm.params).reset_index().rename(
+        columns={0: 'coefficient', 'index': 'factor'})
+    pvals = pd.DataFrame(lm.pvalues[[1, 2]]).reset_index().rename(
+        columns={0: 'p value', 'index': 'factor'})
+    params = params.merge(pvals, how='left', on='factor').set_index('factor')
+
+    # add confidence intervals
+    conf = pd.DataFrame(data=lm.conf_int())
+    conf.columns = ["conf_int_low", "conf_int_high"]
+    return params.join(conf)
+# -
+
 # filter CCG page views only:
-m3 = m2.loc[m2.org_type_ == "ccg"]
-m3.head()
+ccg_data_agg = all_data_agg.loc[all_data_agg.org_type_ == "ccg"]
+ccg_data_agg_trimmed = trim_5_percentiles(ccg_data_agg, debug=False)
+compute_regression(ccg_data_agg_trimmed)
 
 # +
-# max-out top 5% to reduce any extreme outliers
-
-mx = m3.copy()
-
-max_out = mx['Unique Pageviews_before'].quantile(0.95)
-m3["proxy_pageviews_before"] = np.where(m3['Unique Pageviews_before']<max_out, m3['Unique Pageviews_before'], max_out)
-
-max_out_b = mx['Unique Pageviews_after'].quantile(0.95)
-m3["proxy_pageviews_after"] = np.where(m3['Unique Pageviews_after']<max_out_b, m3['Unique Pageviews_after'], max_out_b)
-
-
-
-result = pd.DataFrame({'Unique Pageviews_after': m3["Unique Pageviews_after"].describe(),
-                       'Unique Pageviews_before': m3["Unique Pageviews_before"].describe(),
-                       'Proxy_pageviews_after': m3["proxy_pageviews_after"].describe(),
-                       'Proxy_pageviews_before': m3["proxy_pageviews_before"].describe()
-                      })
-
-result
-
-
-# +
-#visualise data and proxy data
-
-import matplotlib.pyplot as plt
-
-m3[["proxy_pageviews_after","proxy_pageviews_before","Unique Pageviews_after","Unique Pageviews_before"]].hist(bins=10)
-plt.show()
-
-
-# +
-m4 = m3.groupby(["allocation_"])['proxy_pageviews_before','proxy_pageviews_after'].mean()
-
-m4
-# -
-
-# ### Statistical analysis
-
-# +
-
-import statsmodels.formula.api as smf
-data = m3.copy()
-# create a new Series called "intervention" to convert intervention/control to numerical values
-data['intervention'] = data.allocation_.map({'con':0, 'I':1})
-
-lm = smf.ols(formula='data["proxy_pageviews_after"] ~ data["proxy_pageviews_before"] +intervention', data=data).fit()
-
-#output regression coefficients and p-values:
-params = pd.DataFrame(lm.params).reset_index().rename(columns={0: 'coefficient','index': 'factor'})
-pvals = pd.DataFrame(lm.pvalues[[1,2]]).reset_index().rename(columns={0: 'p value','index': 'factor'})
-params.merge(pvals, how='left',on='factor').set_index('factor').reset_index()
-# -
-
-# confidence intervals
-lm.conf_int().loc["intervention"]
-
 # # Engagement outcome E2
-# ## Number of page views over one month on practice pages showing low-priority measures, before vs after intervention, grouped up to CCGs, between intervention and control groups.
 
-# filter practice page views only:
-m5 = m2.loc[m2.org_type_ == "practice"]
-m5.head()
-
-# +
-# max-out top 5% to reduce extreme outliers
-
-mx = m5.copy()
-
-max_out = mx['Unique Pageviews_before'].quantile(0.95)
-m5["proxy_pageviews_before"] = np.where(m5['Unique Pageviews_before']<max_out, m5['Unique Pageviews_before'], max_out)
-
-max_out_b = mx['Unique Pageviews_after'].quantile(0.95)
-m5["proxy_pageviews_after"] = np.where(m5['Unique Pageviews_after']<max_out_b, m5['Unique Pageviews_after'], max_out_b)
-
-result = pd.DataFrame({'Unique Pageviews_after': m5["Unique Pageviews_after"].describe(),
-                       'Unique Pageviews_before': m5["Unique Pageviews_before"].describe(),
-                       'Proxy_pageviews_after': m5["proxy_pageviews_after"].describe(),
-                       'Proxy_pageviews_before': m5["proxy_pageviews_before"].describe()
-                      })
-
-result
-
+practice_data_agg = all_data_agg.loc[all_data_agg.org_type_ == "practice"]
+practice_data_agg_trimmed = trim_5_percentiles(practice_data_agg, debug=False)
+compute_regression(practice_data_agg_trimmed)
 # -
 
-import matplotlib.pyplot as plt
-# #%matplotlib inline
-# %matplotlib notebook
-m5[["proxy_pageviews_after","proxy_pageviews_before","Unique Pageviews_after","Unique Pageviews_before"]].hist(bins=10)
-plt.show()
-
-
-m5.groupby(["allocation_"])['proxy_pageviews_before','proxy_pageviews_after'].mean()
-
-
-# ### Statistical analysis
-
-# +
-
-import statsmodels.formula.api as smf
-data = m5
-# create a new Series called "intervention" to convert intervention/control to numerical values
-data['intervention'] = data.allocation_.map({'con':0, 'I':1})
-
-lm = smf.ols(formula='data["proxy_pageviews_after"] ~ data["proxy_pageviews_before"] +intervention', data=data).fit()
-
-#output regression coefficients and p-values:
-params = pd.DataFrame(lm.params).reset_index().rename(columns={0: 'coefficient','index': 'factor'})
-pvals = pd.DataFrame(lm.pvalues[[1,2]]).reset_index().rename(columns={0: 'p value','index': 'factor'})
-params.merge(pvals, how='left',on='factor').set_index('factor')
-# -
-
-#confidence intervals
-lm.conf_int().loc["intervention"]
 
 # # Engagement outcomes E3 and E4 : Alert sign-ups
 # ## E3 Number of registrations to OpenPrescribing CCG email alerts
@@ -341,19 +331,19 @@ alerts["created_at"] = pd.to_datetime(alerts.created_at)
 alerts.head()
 # -
 
-# map practices to joint teams (only included randomised CCGs)
+# map practices to joint teams (only included randomised Rct_Ccgs)
 a2 = alerts.merge(map2[["ccg_id","code"]], left_on="practice",right_on="code", how="left").drop("code",axis=1)
 a2.ccg_id = a2.ccg_id.combine_first(a2.pct)
 a2.head()
 
-# merge ccgs with data
+# merge rct_ccgs with data
 a3 = a2.copy()
-a3 = ccgs.merge(a3, left_on="pct_id",right_on="ccg_id",how="left")
+a3 = rct_ccgs.merge(a3, left_on="pct_id",right_on="ccg_id",how="left")
 a3.head()
 
 
 # join to visit dates
-a4 = dts.drop(["size_rank","allocation"],axis=1).merge(a3.drop(["approved"],axis=1), how='left', on='joint_id')
+a4 = allocations_with_dates_and_stats.drop(["size_rank","allocation"],axis=1).merge(a3.drop(["approved"],axis=1), how='left', on='joint_id')
 a4.head()
 
 # +

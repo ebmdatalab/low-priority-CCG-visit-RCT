@@ -87,6 +87,11 @@ def query_analytics(query, columns=[]):
                 col_name = metricHeader.get('name')
                 if len(dateRangeValues) > 1:
                     col_name += "_range_{}".format(i)
+                if value:
+                    if "." in value:
+                        value = float(value)
+                    else:
+                        value = int(value)
                 data_row[col_name] = value
                 data.append(data_row)
     df = pd.DataFrame(data)
