@@ -33,7 +33,6 @@
 # +
 import pandas as pd
 import numpy as np
-from lp_measure_conditions import tables
 
 from analysis import compute_regression
 

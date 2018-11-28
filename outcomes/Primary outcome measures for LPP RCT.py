@@ -32,10 +32,10 @@
 # %autosave 0
 
 # +
+import os
 import requests
 import pandas as pd
 import numpy as np
-from lp_measure_conditions import tables
 
 from analysis import compute_regression
 
@@ -44,7 +44,7 @@ logger = logging.getLogger('pandas_gbq')
 logger.setLevel(logging.ERROR)
 
 GBQ_PROJECT_ID = '620265099307'
-USE_CACHED_DATA = False  # Useful for testing; set to false when doing real analysis
+DUMMY_RUN = True  # Useful for testing; set to false when doing real analysis
 
 # Set dates of baseline and follow-up periods
 baseline_start = '2017-01-01'       # baseline start
@@ -69,7 +69,7 @@ commit_for_measure_definitions = "6f949660fee06401102136926eaba075d963511d"
 
 # Import data from BigQuery
 # (Specifically, per-measure cost/items numerators, and population denominators)
-if USE_CACHED_DATA:
+if DUMMY_RUN and os.path.exists("../data/all_measure_data.csv"):
     rawdata = pd.read_csv("../data/all_measure_data.csv").drop(['Unnamed: 0'], axis=1)
 else:
     rawdata = pd.DataFrame()

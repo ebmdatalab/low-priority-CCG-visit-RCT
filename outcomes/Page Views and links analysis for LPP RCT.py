@@ -24,6 +24,8 @@
 
 # +
 # Imports and variables
+import os
+
 from analysis import compute_regression
 from analysis import trim_5_percentiles
 
@@ -51,9 +53,10 @@ GBQ_PROJECT_ID = '620265099307'
 #
 from importlib import reload
 reload(analytics)
-if DUMMY_RUN:
+if DUMMY_RUN and os.path.exists("../data/pageview_stats.csv"):
     # CCG-level data:
     all_stats = pd.read_csv("../data/pageview_stats.csv",usecols={"Page","Date","Pageviews","Unique Pageviews"})
+    all_stats['Date'] = pd.to_datetime(all_stats['Date'])
 else:
     ccg_query = [
         {
