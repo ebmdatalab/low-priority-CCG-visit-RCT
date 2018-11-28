@@ -1,5 +1,7 @@
 language: python
 python:
   - "3.6"
+before_install:
+  - openssl aes-256-cbc -K $encrypted_f5b2a53a98db_key -iv $encrypted_f5b2a53a98db_iv -in client_secrets.json.enc -out outcomes/client_secrets.json -d
 script:
   - python test.py
