@@ -43,24 +43,17 @@ GBQ_PROJECT_ID = '620265099307'
 
 # # Engagement outcomes
 
-# +
 # Import page views data
 #
 # Timepoints:
 # - 1 month before/after
 # - April-Sept 2018 vs April-Sept 2019
 #
-
+from importlib import reload
+reload(analytics)
 if DUMMY_RUN:
     # CCG-level data:
-    ccg_stats = pd.read_csv('../data/page_views_dummy_ccg.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
-    # practice-level data:
-    practice_stats = pd.read_csv('../data/page_views_dummy_practice.csv',usecols={"Page","Date","Pageviews","Unique Pageviews"} )
-    ccg_stats['date'] = pd.to_datetime(ccg_stats.Date, format="%Y%m%d")
-    practice_stats['date'] = pd.to_datetime(practice_stats.Date, format="%Y%m%d")
-    # Filter out wrongly included lines in dummy data
-    ccg_stats = ccg_stats[ccg_stats.Page.str.contains("lowpriority")]
-    practice_stats = practice_stats[practice_stats.Page.str.contains("lowpriority")]
+    all_stats = pd.read_csv("../data/pageview_stats.csv",usecols={"Page","Date","Pageviews","Unique Pageviews"})
 else:
     ccg_query = [
         {
@@ -84,7 +77,7 @@ else:
                     {
                         "dimensionName": "ga:pagePath",
                         "operator": "REGEXP",
-                        "expressions": ["^/ccg.*lowp"]
+                        "expressions": ["^/(ccg|practice).*lowp"]
                     },
                     {
                         "dimensionName": "ga:pagePath",
@@ -96,22 +89,10 @@ else:
             }]
         }]
     colnames = ["Date", "Page", "Pageviews", "Unique Pageviews"]
-    ccg_stats = analytics.query_analytics(ccg_query, columns=colnames)
+    all_stats = analytics.query_analytics(ccg_query, columns=colnames)
+    all_stats.to_csv("../data/pageview_stats.csv")
 
-    # ...and the same query at practice level
-    practice_query = ccg_query.copy()
-    practice_query[0]["dimensionFilterClauses"][0]["filters"][0]["expressions"] = ["^/practice.*lowp"]
-    practice_stats = analytics.query_analytics(practice_query, columns=colnames)
-
-    ccg_stats.to_csv("../data/ccg_pageview_stats.csv")
-    practice_stats.to_csv("../data/practice_pageview_stats.csv")
-# -
-
-ccg_stats.head()
-
-all_stats = pd.concat([ccg_stats,practice_stats], sort=False)
-
-# extract ccg/practice code from path
+# extract if ccg/practice code from path
 all_stats["org_id"] = np.where(
     all_stats.Page.str.contains("ccg"),
     all_stats.Page.str.replace('/ccg/', '').str[:3],
@@ -120,28 +101,30 @@ all_stats["org_type"] = np.where(
     all_stats.Page.str.contains("ccg"),
     "ccg",
     'practice')
-all_stats.head()
+all_stats.head(2)
 
 # +
-### import allocated Rct_Ccgs
+### CCGs that have been allocated to the RCT 
 rct_ccgs = pd.read_csv('../data/randomisation_group.csv')
 
-# joint team information
+# Joint Team information (which CCGs work together in Joint Teams)
 team = pd.read_csv('../data/joint_teams.csv')
 
-# create map of rct_ccgs to joint teams
+# Map CCGs to Joint Teams
 rct_ccgs = rct_ccgs.merge(team, on="joint_team", how="left")
 
-# fill blank ccg_ids from joint_id column, so every CCG has a value for joint_id
+# Fill blank ccg_ids from joint_id column, so even CCGs not in Joint Teams 
+# have a value for joint_id
 rct_ccgs["pct_id"] = rct_ccgs["ccg_id"].combine_first(rct_ccgs["joint_id"])
 rct_ccgs = rct_ccgs[["joint_id", "allocation", "pct_id"]]
+
 # Add numerical intervention field
 rct_ccgs['intervention'] = rct_ccgs.allocation.map({'con': 0, 'I': 1})
 
-rct_ccgs.head()
+rct_ccgs.head(2)
 
 # +
-## Map practices to Rct_Ccgs, for practice-level analysis
+## Map practices to joint teams, for practice-level analysis
 
 # Get current mapping data from bigquery
 practice_to_ccg = '''select distinct ccg_id, code
@@ -219,7 +202,7 @@ all_data.head(2)
 # +
 # assign each page view occurrence to before vs after intervention (1 month ~ 28 days)
 
-all_data["datediff"] = all_data.date - all_data.date_int
+all_data["datediff"] = all_data.Date - all_data.date_int
 all_data["timing"] = "none"
 all_data.loc[(all_data.datediff <= "28 days") & (all_data.datediff > "0 days"),
       "timing"] = "after"
