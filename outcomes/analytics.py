@@ -50,30 +50,39 @@ def initialize_analyticsreporting():
     return analytics
 
 
-def get_report(analytics, query):
+def get_report(analytics, queries):
     # Use the Analytics Service Object to query the Analytics Reporting API V4.
-    return analytics.reports().batchGet(
+    response = analytics.reports().batchGet(
         body={
-            'reportRequests': query
+            'reportRequests': queries
         }
     ).execute()
+    data = []
+    unpaged_queries = []
+    for i, report in enumerate(response.get('reports', [])):
+        d, nextPageToken = process_report(report)
+        data.extend(d)
+        if nextPageToken:
+            unpaged_query = queries[i].copy()
+            unpaged_query['pageToken'] = nextPageToken
+            unpaged_queries.append(unpaged_query)
+    if unpaged_queries:
+        data.extend(get_report(analytics, unpaged_queries))
+    return data
 
 
-def query_analytics(query, columns=[]):
-    """Parses and prints the Analytics Reporting API V4 response"""
-    analytics = initialize_analyticsreporting()
-    response = get_report(analytics, query)
-    for report in response.get('reports', []):
-        columnHeader = report.get('columnHeader', {})
-        dimensionHeaders = columnHeader.get('dimensions', [])
-        metricHeaders = columnHeader.get('metricHeader', {}).get('metricHeaderEntries', [])
-        rows = report.get('data', {}).get('rows', [])
-        samplesReadCounts = report.get('data', {}).get('samplesReadCounts', [])
-        samplingSpaceSizes = report.get('data', {}).get('samplingSpaceSizes', [])
+def process_report(report):
+    data = []
+    nextPageToken = report.get('nextPageToken', None)
+    columnHeader = report.get('columnHeader', {})
+    dimensionHeaders = columnHeader.get('dimensions', [])
+    metricHeaders = columnHeader.get('metricHeader', {}).get('metricHeaderEntries', [])
+    rows = report.get('data', {}).get('rows', [])
+    samplesReadCounts = report.get('data', {}).get('samplesReadCounts', [])
+    samplingSpaceSizes = report.get('data', {}).get('samplingSpaceSizes', [])
     if samplesReadCounts:
         print("Warning: data sampled at around {}%".format(
             round(float(samplesReadCounts[0])/samplingSpaceSizes[0] * 100)))
-    data = []
     for row in rows:
         dimensions = row.get('dimensions', [])
         dateRangeValues = row.get('metrics', [])
@@ -94,6 +103,13 @@ def query_analytics(query, columns=[]):
                         value = int(value)
                 data_row[col_name] = value
                 data.append(data_row)
+    return data, nextPageToken
+
+
+def query_analytics(query, columns=[]):
+    """Parses and prints the Analytics Reporting API V4 response"""
+    analytics = initialize_analyticsreporting()
+    data = get_report(analytics, query)
     df = pd.DataFrame(data)
     for col in df.columns:
         if col.startswith("ga:date"):
