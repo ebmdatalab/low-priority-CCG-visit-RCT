@@ -1,0 +1,11 @@
+jupyter
+google-api-python-client
+pandas
+pandas-gbq
+ipykernel
+pytest
+jupytext
+matplotlib
+statsmodels
+scipy
+oauth2client

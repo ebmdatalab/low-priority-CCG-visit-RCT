@@ -1,0 +1,11 @@
+.ipynb_checkpoints
+cache.sqlite
+*~
+.pytest*
+__pycache__
+.#*
+.coverage
+environment
+analyticsreporting.dat
+client_secrets.json
+google-credentials.json
