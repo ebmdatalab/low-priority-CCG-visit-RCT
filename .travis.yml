@@ -1,7 +1,12 @@
 language: python
 python:
   - "3.6"
+
+env:
+  global:
+    GOOGLE_APPLICATION_CREDENTIALS: ${TRAVIS_BUILD_DIR}/outcomes/google-credentials.json
 before_install:
   - openssl aes-256-cbc -K $encrypted_f5b2a53a98db_key -iv $encrypted_f5b2a53a98db_iv -in client_secrets.json.enc -out outcomes/client_secrets.json -d
+  - openssl aes-256-cbc -K $encrypted_f5b2a53a98db_key -iv $encrypted_f5b2a53a98db_iv -in google-credentials.json.enc -out outcomes/google-credentials.json -d
 script:
   - python test.py

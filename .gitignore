@@ -8,3 +8,4 @@ __pycache__
 environment
 analyticsreporting.dat
 client_secrets.json
+google-credentials.json
