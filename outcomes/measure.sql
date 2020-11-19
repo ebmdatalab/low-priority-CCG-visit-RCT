@@ -8,7 +8,7 @@ WITH
   FROM
     ebmdatalab.hscic.practice_statistics_all_years AS stats
   INNER JOIN
-    ebmdatalab.hscic.practices AS practices
+    ebmdatalab.research.practices_2019_09 AS practices
   ON
     stats.practice = practices.code
   WHERE
@@ -20,14 +20,14 @@ WITH
     ),
   numerator AS (
   SELECT
-    pct AS pct_id,
+    practices.ccg_id AS pct_id,
     p.month,
     SUM(items) AS items,
     SUM(actual_cost) AS cost
   FROM
     `ebmdatalab.hscic.normalised_prescribing_standard` AS p
   INNER JOIN
-    ebmdatalab.hscic.practices AS practices
+    ebmdatalab.research.practices_2019_09 AS practices
   ON
     p.practice = practices.code
   WHERE
