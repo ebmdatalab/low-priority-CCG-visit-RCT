@@ -42,7 +42,7 @@ definition_url = (
     "{measure}.json")
 commit_for_measure_definitions = "6f949660fee06401102136926eaba075d963511d"
 
-#import herbal list manually due to different construction of query based on a separate file
+# import herbal list manually due to different construction of query based on a separate file
 herbal_bnf_list = pd.read_csv(os.path.join('..','data','herbal_list.csv'), usecols=["bnf_code"])
 herbal_bnf_list = tuple(herbal_bnf_list["bnf_code"])
 
@@ -231,6 +231,7 @@ baselines.groupby("allocation").agg({
 # In[12]:
 
 
+# summary data
 out = rct_agg_6m.groupby("allocation").agg({"joint_id":"nunique",
                                                 "baseline_calc_value":{"mean","std"},
                                                 "follow_up_calc_value":{"mean","std"}})
@@ -239,6 +240,7 @@ out["change"] = out[("follow_up_calc_value","mean")] - out[("baseline_calc_value
 
 display(out.sort_index(ascending=False))
 
+# regression analysis
 formula = ('data["follow_up_calc_value"] '
            '~ data["baseline_calc_value"] + intervention')
 compute_regression(rct_agg_6m, formula=formula)
@@ -251,6 +253,7 @@ compute_regression(rct_agg_6m, formula=formula)
 # In[13]:
 
 
+# summary data
 out = rct_agg_6m.groupby("allocation").agg({"joint_id":"nunique",
                                                 "baseline_items_thou":{"mean","std"},
                                                 "follow_up_items_thou":{"mean","std"}})
@@ -259,6 +262,7 @@ out["change"] = out[("follow_up_items_thou","mean")] - out[("baseline_items_thou
 
 display(out.sort_index(ascending=False))
 
+# regression analysis
 formula = ('data["follow_up_items_thou"] '
            '~ data["baseline_items_thou"] + intervention')
 compute_regression(rct_agg_6m, formula=formula)
@@ -268,7 +272,7 @@ compute_regression(rct_agg_6m, formula=formula)
 
 # Some CCGs did not successfully receive the intervention.
 
-# In[15]:
+# In[14]:
 
 
 visit = pd.read_csv(os.path.join('..','data','allocated_ccgs_visit_timetable.csv'))
@@ -277,6 +281,7 @@ visit["flag"] = np.where(visit["date"].str.len()>0,1,0)
 data2 = rct_agg_6m.merge(visit, on="joint_id", how="left").drop("date", axis=1)
 data2["flag"] = data2["flag"].fillna(0).astype("int")
 
+# summary data
 out = data2.groupby("flag").agg({"joint_id":"nunique",
                                  "baseline_calc_value":{"mean","std"},
                                  "follow_up_calc_value":{"mean","std"}})
@@ -285,15 +290,16 @@ out["change"] = out[("follow_up_calc_value","mean")] - out[("baseline_calc_value
 
 display(out)
 
-
+# regression analysis
 formula = ('data["follow_up_calc_value"] '
            '~ data["baseline_calc_value"] + flag')
 compute_regression(data2, formula=formula)
 
 
-# In[16]:
+# In[15]:
 
 
+# summary data
 out = data2.groupby("flag").agg({"joint_id":"nunique",
                                  "baseline_items_thou":{"mean","std"},
                                  "follow_up_items_thou":{"mean","std"}})
@@ -302,6 +308,7 @@ out["change"] = out[("follow_up_items_thou","mean")] - out[("baseline_items_thou
 
 display(out)
 
+# regression analysis
 formula = ('data["follow_up_items_thou"] '
            '~ data["baseline_items_thou"] + flag')
 compute_regression(data2, formula=formula)
