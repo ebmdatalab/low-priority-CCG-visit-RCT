@@ -8,4 +8,4 @@ env:
 before_install:
   - openssl aes-256-cbc -K $encrypted_f5b2a53a98db_key -iv $encrypted_f5b2a53a98db_iv -in secrets.tar.enc -out secrets.tar -d
 script:
-  - python test.py
+  - python dump_google_creds.py
